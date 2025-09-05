@@ -1,0 +1,101 @@
+
+import type { Product, Category, Review } from './types';
+
+export const reviews: Review[] = [
+  { id: '1', author: 'Ana Pérez', rating: 5, comment: '¡Exquisita! La mejor mermelada de frutilla que probé. Súper natural.', date: '2023-10-15' },
+  { id: '2', author: 'Juan García', rating: 4, comment: 'Muy buen dulce de leche, cremoso y con el punto justo de dulzor. El envío fue rápido.', date: '2023-10-12' },
+];
+
+export const initialCategories: Category[] = [
+  { id: '1', name: 'Mermeladas' },
+  { id: '2', name: 'Dulces y Pulpas' },
+  { id: '3', name: 'Almíbares' },
+  { id: '4', name: 'Especiales' },
+];
+
+export const products: Product[] = [
+  {
+    id: '1',
+    name: 'Mermelada de Frutilla Artesanal',
+    description: 'Elaborada con frutillas frescas de estación, seleccionadas a mano. Una explosión de sabor natural sin conservantes artificiales.',
+    price: 1850.00,
+    imageUrl: 'https://placehold.co/600x600.png',
+    category: 'Mermeladas',
+    stock: 15,
+    featured: true,
+    reviews: reviews,
+  },
+  {
+    id: '2',
+    name: 'Dulce de Leche Clásico',
+    description: 'Receta tradicional familiar. Cremoso, suave y con el auténtico sabor del dulce de leche casero. Ideal para postres y tostadas.',
+    price: 1230.50,
+    imageUrl: 'https://placehold.co/600x600.png',
+    category: 'Dulces y Pulpas',
+    stock: 25,
+    featured: true,
+    reviews: [],
+  },
+  {
+    id: '3',
+    name: 'Mermelada de Durazno Casera',
+    description: 'Hecha con duraznos jugosos y maduros. El equilibrio perfecto entre dulzura y acidez, para empezar el día con energía.',
+    price: 1790.00,
+    imageUrl: 'https://placehold.co/600x600.png',
+    category: 'Mermeladas',
+    stock: 50,
+    reviews: reviews.slice(0, 1),
+  },
+  {
+    id: '4',
+    name: 'Duraznos en Almíbar',
+    description: 'Mitades de duraznos seleccionados, conservados en un almíbar ligero para que disfrutes de su sabor todo el año. Listos para servir.',
+    price: 2500.00,
+    imageUrl: 'https://placehold.co/600x600.png',
+    category: 'Almíbares',
+    stock: 0,
+    reviews: [],
+  },
+  {
+    id: '5',
+    name: 'Pulpa de Frutilla para Repostería',
+    description: '100% pulpa de frutilla natural, sin azúcar agregada. Perfecta para rellenos, mousses, helados y salsas.',
+    price: 3100.00,
+    imageUrl: 'https://placehold.co/600x600.png',
+    category: 'Dulces y Pulpas',
+    stock: 80,
+    featured: true,
+    reviews: [],
+  },
+  {
+    id: '6',
+    name: 'Combo Familiar "Sabores de Casa"',
+    description: 'Un pack especial con nuestra selección de productos estrella: 1 Mermelada de Frutilla, 1 Dulce de Leche y 1 Duraznos en Almíbar.',
+    price: 5500.00,
+    imageUrl: 'https://placehold.co/600x600.png',
+    category: 'Especiales',
+    stock: 18,
+    reviews: [],
+  },
+  {
+    id: '7',
+    name: 'Mermelada de Ciruela',
+    description: 'Sabor intenso y textura perfecta. Una mermelada con carácter, ideal para acompañar quesos y panes artesanales.',
+    price: 1800.00,
+    imageUrl: 'https://placehold.co/600x600.png',
+    category: 'Mermeladas',
+    stock: 60,
+    featured: true,
+    reviews: reviews.slice(1,2),
+  },
+  {
+    id: '8',
+    name: 'Higos en Almíbar',
+    description: 'Higos tiernos y dulces, conservados en un almíbar especiado con un toque de canela. Un postre clásico y delicioso.',
+    price: 2800.75,
+    imageUrl: 'https://placehold.co/600x600.png',
+    category: 'Almíbares',
+    stock: 30,
+    reviews: [],
+  },
+];

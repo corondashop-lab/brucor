@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /advertisements/{adId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow delete: if false;
+    }
+
+    match /sales/{saleId} {
+      // Un usuario autenticado puede leer un documento de venta. 
+      // La seguridad de quién ve qué se maneja en el código, 
+      // que solo solicita los ID de venta que pertenecen al usuario.
+      allow get: if request.auth != null;
+      
+      // Solo el admin puede listar todas las ventas.
+      allow list: if isAdmin();
+
+      // Un usuario autenticado solo puede crear ventas para sí mismo.
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.customerInfo.userId;
+
+      // Solo los admins pueden actualizar o eliminar ventas.
+      allow update, delete: if isAdmin();
+    }
+  }
+}
