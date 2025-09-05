@@ -8,7 +8,7 @@ import { AuthProvider } from '@/hooks/use-auth';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { usePathname } from 'next/navigation';
-import { type ReactNode } from 'react';
+import { type ReactNode, Suspense } from 'react';
 
 // Metadata can't be exported from a client component.
 // If you need dynamic metadata, you'll need to move this to a server component
@@ -22,9 +22,21 @@ function RootLayoutContent({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isAdminPage = pathname.startsWith('/admin');
 
+  const headerFallback = (
+    <div className="bg-background/80 backdrop-blur-md border-b sticky top-0 z-40">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16" />
+        </div>
+    </div>
+  )
+
   return (
     <>
-      {!isAdminPage && <Header />}
+      {!isAdminPage && (
+        <Suspense fallback={headerFallback}>
+            <Header />
+        </Suspense>
+      )}
       <main className="flex-grow">
         {children}
       </main>
