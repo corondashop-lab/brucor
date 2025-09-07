@@ -1,13 +1,13 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    "./src/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
       colors: {
-        background: "#ffffff", // fondo blanco, cámbialo si querés otro color
-        border: "#e5e7eb",     // gris claro, podés ajustarlo
+        foreground: "#111827",
+        border: "#D1D5DB",
       },
     },
   },
