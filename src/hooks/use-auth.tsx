@@ -20,6 +20,7 @@ import {
     sendEmailVerification
 } from "@/lib/firebase";
 import { useToast } from "./use-toast";
+import { verifyRecaptcha } from "@/lib/recaptcha";
 
 // This hook provides a complete Firebase authentication flow.
 // It handles user registration, login, logout, and session management.
@@ -29,7 +30,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<User>;
   logout: () => void;
-  register: (credentials: Omit<User, 'id'> & { password?: string }) => Promise<void>;
+  register: (credentials: Omit<User, 'id'> & { password?: string, recaptchaToken: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,19 +52,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
         setLoading(true);
         if (firebaseUser) {
-            // User is signed in, check if they are verified (or if it's the special admin user)
-            const userDoc = await getDocument<User>('users', firebaseUser.uid);
+            const userDoc = await getDocument<StoredUser>('users', firebaseUser.uid);
             
             if (userDoc && (firebaseUser.emailVerified || userDoc.isAdmin)) {
+                // If user is verified in Firebase but not in our DB, update our DB.
+                if (firebaseUser.emailVerified && !userDoc.isVerified) {
+                    userDoc.isVerified = true;
+                    await addOrUpdateDocument('users', { isVerified: true }, firebaseUser.uid);
+                }
                 sessionStorage.setItem("minimalStoreUser", JSON.stringify(userDoc));
                 setUser(userDoc);
+
             } else if (!userDoc) {
-                // This case handles if a user exists in Auth but not in Firestore DB.
                 await signOut(auth);
                 setUser(null);
                 sessionStorage.removeItem("minimalStoreUser");
             } else {
-                // User is signed in but not verified, treat as logged out.
+                // User signed in but not verified, treat as logged out.
                 setUser(null);
                 sessionStorage.removeItem("minimalStoreUser");
             }
@@ -84,11 +89,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
         userCredential = await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
-        // If user does not exist and it's the admin email, try to create it.
         if (error.code === 'auth/user-not-found' && email === 'admin@store.com') {
             userCredential = await createUserWithEmailAndPassword(auth, email, password);
         } else {
-            // Handle other auth errors, like wrong password.
              if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
                 throw new Error("La contraseña o el email son incorrectos.");
             }
@@ -99,13 +102,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const firebaseUser = userCredential.user;
     let userDoc = await getDocument<StoredUser>('users', firebaseUser.uid);
 
-    // If it's the admin user and the document doesn't exist in Firestore, create it.
     if (email === 'admin@store.com' && !userDoc) {
         const adminData: StoredUser = { 
             id: firebaseUser.uid, 
             name: 'Admin', 
             email: email, 
             isAdmin: true,
+            isVerified: true
         };
         await addOrUpdateDocument('users', adminData, firebaseUser.uid);
         userDoc = adminData;
@@ -115,6 +118,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         await signOut(auth);
         throw new Error("Tu cuenta no ha sido verificada. Por favor, revisa tu email.");
     }
+    
+    if (userDoc && firebaseUser.emailVerified && !userDoc.isVerified) {
+        await addOrUpdateDocument('users', { isVerified: true }, firebaseUser.uid);
+        userDoc.isVerified = true;
+    }
+
 
     if (!userDoc) {
         await signOut(auth);
@@ -126,26 +135,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return userDoc;
   };
 
-  const register = async (credentials: Omit<User, 'id'> & { password: string }) => {
+  const register = async (credentials: Omit<User, 'id'> & { password: string, recaptchaToken: string }) => {
     if (!credentials.password) throw new Error("La contraseña es requerida.");
 
-    const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
-    const firebaseUser = userCredential.user;
-    
-    const newUser: StoredUser = {
-        id: firebaseUser.uid,
-        name: credentials.name,
-        email: credentials.email,
-        isAdmin: false,
-    };
-    
-    await addOrUpdateDocument("users", newUser, firebaseUser.uid);
-    
-    // Send verification email
-    await sendEmailVerification(firebaseUser);
-    
-    // Log out the user immediately after registration. They must verify their email to log in.
-    await signOut(auth);
+    const recaptchaResponse = await fetch('/api/verify-recaptcha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: credentials.recaptchaToken }),
+    });
+
+    const recaptchaData = await recaptchaResponse.json();
+
+    if (!recaptchaData.success) {
+        throw new Error(recaptchaData.message || 'La verificación de reCAPTCHA falló. Intenta de nuevo.');
+    }
+
+    try {
+        const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
+        const firebaseUser = userCredential.user;
+        
+        const newUser: StoredUser = {
+            id: firebaseUser.uid,
+            name: credentials.name,
+            email: credentials.email,
+            isAdmin: false,
+            isVerified: false,
+        };
+        
+        await addOrUpdateDocument("users", newUser, firebaseUser.uid);
+        
+        await sendEmailVerification(firebaseUser);
+        
+        await signOut(auth);
+    } catch(error: any) {
+        if (error.code === 'auth/weak-password') {
+            throw new Error('La contraseña es demasiado débil. Debe tener al menos 6 caracteres.');
+        }
+        throw error;
+    }
   };
   
 
