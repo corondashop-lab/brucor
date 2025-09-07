@@ -10,47 +10,65 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Terminal, Loader2 } from "lucide-react";
+import ReCAPTCHA from "react-google-recaptcha";
 
+const recaptchaSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!;
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isRobot, setIsRobot] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const { register } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isRobot) {
+    setPasswordError(null);
+
+    if (password.length < 6) {
+        setPasswordError("La contraseña debe tener al menos 6 caracteres.");
+        return;
+    }
+    
+    if (!recaptchaToken) {
         toast({
             variant: "destructive",
             title: "Verificación Requerida",
-            description: "Por favor, confirma que no eres un robot.",
+            description: "Por favor, completa la verificación de reCAPTCHA.",
         });
         return;
     }
+
     setIsLoading(true);
+
     try {
-      await register({ name, email, password });
+      await register({ name, email, password }, recaptchaToken);
       setShowSuccessMessage(true);
+
     } catch (error) {
       if (error instanceof Error) {
         let message = error.message;
         if (error.message.includes("auth/email-already-in-use")) {
             message = "Este correo electrónico ya está registrado. Por favor, inicia sesión.";
+        } else if (error.message.includes("auth/weak-password")) {
+            setPasswordError("La contraseña es demasiado débil. Debe tener al menos 6 caracteres.");
+            message = "La contraseña es demasiado débil.";
         }
-        toast({
-            variant: "destructive",
-            title: "Error de Registro",
-            description: message,
-        });
+        
+        if (message !== "La contraseña es demasiado débil.") {
+            toast({
+                variant: "destructive",
+                title: "Error de Registro",
+                description: message,
+            });
+        }
       }
     } finally {
         setIsLoading(false);
@@ -117,20 +135,21 @@ export default function RegisterPage() {
                 type="password"
                 required
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (passwordError) setPasswordError(null);
+                }}
                 disabled={isLoading}
               />
+               {passwordError && <p className="text-sm font-medium text-destructive">{passwordError}</p>}
             </div>
-             <div className="flex items-center space-x-2">
-                <Checkbox id="terms" checked={isRobot} onCheckedChange={(checked) => setIsRobot(checked as boolean)} disabled={isLoading}/>
-                <label
-                    htmlFor="terms"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                    No soy un robot
-                </label>
+            <div className="flex justify-center">
+               <ReCAPTCHA
+                  sitekey={recaptchaSiteKey}
+                  onChange={(token) => setRecaptchaToken(token)}
+                />
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full" disabled={isLoading || !recaptchaToken}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isLoading ? 'Registrando...' : 'Registrarse'}
             </Button>
