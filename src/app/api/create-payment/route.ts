@@ -74,9 +74,9 @@ export async function POST(req: NextRequest) {
         },
         auto_return: 'approved',
         back_urls: {
-          success: `https://www.brucor.com.ar/`,
-          failure: `https://www.brucor.com.ar/`,
-          pending: `https://www.brucor.com.ar/`,
+          success: `https://www.corondashop.online/`,
+          failure: `https://www.corondashop.online/`,
+          pending: `https://www.corondashop.online/`,
         },
         notification_url: `${origin}/api/webhook`
       },
