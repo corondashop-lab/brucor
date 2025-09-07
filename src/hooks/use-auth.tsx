@@ -20,7 +20,6 @@ import {
     sendEmailVerification
 } from "@/lib/firebase";
 import { useToast } from "./use-toast";
-import { verifyRecaptcha } from "@/lib/recaptcha";
 
 // This hook provides a complete Firebase authentication flow.
 // It handles user registration, login, logout, and session management.
@@ -30,7 +29,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<User>;
   logout: () => void;
-  register: (credentials: Omit<User, 'id'> & { password?: string, recaptchaToken: string }) => Promise<void>;
+  register: (credentials: Omit<User, 'id'> & { password?: string }, recaptchaToken: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -54,33 +53,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (firebaseUser) {
             const userDoc = await getDocument<StoredUser>('users', firebaseUser.uid);
             
-            if (userDoc && (firebaseUser.emailVerified || userDoc.isAdmin)) {
-                // If user is verified in Firebase but not in our DB, update our DB.
+            if (userDoc) {
+                let needsUpdate = false;
                 if (firebaseUser.emailVerified && !userDoc.isVerified) {
                     userDoc.isVerified = true;
-                    await addOrUpdateDocument('users', { isVerified: true }, firebaseUser.uid);
+                    needsUpdate = true;
                 }
-                sessionStorage.setItem("minimalStoreUser", JSON.stringify(userDoc));
-                setUser(userDoc);
 
-            } else if (!userDoc) {
-                await signOut(auth);
-                setUser(null);
-                sessionStorage.removeItem("minimalStoreUser");
+                if (needsUpdate) {
+                    await addOrUpdateDocument('users', { isVerified: userDoc.isVerified }, firebaseUser.uid);
+                }
+                
+                if (userDoc.isVerified || userDoc.isAdmin) {
+                    sessionStorage.setItem("minimalStoreUser", JSON.stringify(userDoc));
+                    setUser(userDoc);
+                } else {
+                    setUser(null);
+                    sessionStorage.removeItem("minimalStoreUser");
+                }
+
             } else {
-                // User signed in but not verified, treat as logged out.
+                await signOut(auth);
                 setUser(null);
                 sessionStorage.removeItem("minimalStoreUser");
             }
         } else {
-            // User is signed out
             sessionStorage.removeItem("minimalStoreUser");
             setUser(null);
         }
         setLoading(false);
     });
 
-    // Cleanup subscription on unmount
     return () => unsubscribe();
   }, []);
   
@@ -135,13 +138,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return userDoc;
   };
 
-  const register = async (credentials: Omit<User, 'id'> & { password: string, recaptchaToken: string }) => {
+  const register = async (credentials: Omit<User, 'id'> & { password: string }, recaptchaToken: string) => {
     if (!credentials.password) throw new Error("La contraseña es requerida.");
 
     const recaptchaResponse = await fetch('/api/verify-recaptcha', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: credentials.recaptchaToken }),
+        body: JSON.stringify({ token: recaptchaToken }),
     });
 
     const recaptchaData = await recaptchaResponse.json();
