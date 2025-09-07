@@ -13,16 +13,18 @@ import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { useState, useEffect } from "react";
 import { initMercadoPago, Wallet } from '@mercadopago/sdk-react';
-import type { CustomerInfo, Sale, StoredUser } from "@/lib/types";
+import type { CustomerInfo, Sale, StoredUser, CartItem } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 import { addOrUpdateDocument, getDocument } from "@/lib/firebase";
+import { useRouter } from 'next/navigation';
 
 const DEFAULT_SHIPPING_COST = 1500;
 
 export default function CheckoutPage() {
   const { cartItems, cartTotal, clearCart, isCartLoaded } = useCart();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [preferenceId, setPreferenceId] = useState<string | null>(null);
   const [shippingCost, setShippingCost] = useState(DEFAULT_SHIPPING_COST);
@@ -34,8 +36,15 @@ export default function CheckoutPage() {
     city: '',
     zip: ''
   });
+  const [checkoutSummary, setCheckoutSummary] = useState<{ items: CartItem[], total: number } | null>(null);
   
   const publicKey = process.env.NEXT_PUBLIC_MP_PUBLIC_KEY;
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, authLoading, router]);
 
   useEffect(() => {
     if (publicKey) {
@@ -76,45 +85,14 @@ export default function CheckoutPage() {
     setCustomerInfo(prev => ({...prev, [id]: value}));
   }
 
-  const saveSaleToFirestore = async () => {
-    if (!user) {
-        console.error("User not logged in, cannot save sale.");
-        return;
-    }
-    const saleCustomerInfo: CustomerInfo = {
-        ...customerInfo,
-        userId: user.id
-    };
-
-    const newSale: Omit<Sale, 'id'> = {
-      customerInfo: saleCustomerInfo,
-      date: new Date().toISOString(),
-      total: total,
-      status: 'Procesando',
-      items: cartItems
-    };
-
-    try {
-        const saleId = await addOrUpdateDocument("sales", newSale);
-        
-        // After saving the sale, update the user's document with the new sale ID.
-        const userDoc = await getDocument<StoredUser>('users', user.id);
-        const existingSaleIds = userDoc?.saleIds || [];
-        await addOrUpdateDocument('users', {
-            saleIds: [...existingSaleIds, saleId]
-        }, user.id);
-
-    } catch(error) {
-        console.error("Failed to save sale to Firestore:", error);
-        toast({variant: "destructive", title: "Error de Red", description: "No se pudo guardar la venta en la base de datos."})
-    }
-  }
-
-
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setPreferenceId(null);
+    
+    if (!user) {
+      toast({ variant: "destructive", title: "Error", description: "Debes iniciar sesión para comprar."});
+      router.push('/login');
+      return;
+    }
 
     const isFormValid = Object.values(customerInfo).every(value => value && String(value).trim() !== '');
     if (!isFormValid) {
@@ -123,25 +101,42 @@ export default function CheckoutPage() {
             title: "Formulario Incompleto",
             description: "Por favor, completa todos los campos de envío.",
         });
-        setIsLoading(false);
         return;
     }
 
+    setIsLoading(true);
+    setPreferenceId(null);
+    
     toast({
       title: "Creando orden...",
       description: "Espera un momento mientras preparamos tu pago.",
     });
 
     try {
-      // First save the sale to get a consistent state before payment
-      await saveSaleToFirestore();
+      const totalAmount = cartTotal + shippingCost;
+      const newSale: Omit<Sale, 'id'> = {
+        customerInfo: { ...customerInfo, userId: user.id },
+        date: new Date().toISOString(),
+        total: totalAmount,
+        status: 'Procesando',
+        items: cartItems.map(({ description, stock, featured, reviews, ...item }) => item) 
+      };
+      
+      const saleId = await addOrUpdateDocument<Sale>("sales", newSale);
+      
+      const userDoc = await getDocument<StoredUser>('users', user.id);
+      const existingSaleIds = userDoc?.saleIds || [];
+      const updatedSaleIds = [...new Set([...existingSaleIds, saleId])];
+      await addOrUpdateDocument<StoredUser>('users', { saleIds: updatedSaleIds }, user.id);
       
       const response = await fetch('/api/create-payment', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ cartItems, shippingCost, customerInfo }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            cartItems, 
+            shippingCost, 
+            customerInfo: { ...customerInfo, userId: user.id } 
+        }),
       });
 
       const data = await response.json();
@@ -151,6 +146,7 @@ export default function CheckoutPage() {
       }
 
       if (data.id) {
+        setCheckoutSummary({ items: cartItems, total: cartTotal });
         setPreferenceId(data.id);
         clearCart();
       } else {
@@ -170,18 +166,20 @@ export default function CheckoutPage() {
     }
   };
   
-  const total = cartTotal + shippingCost;
+  const displayItems = preferenceId ? checkoutSummary?.items : cartItems;
+  const displayTotal = preferenceId ? checkoutSummary?.total : cartTotal;
+  const total = (displayTotal ?? 0) + shippingCost;
   
-  if (!isCartLoaded) {
+  if (authLoading || !isCartLoaded) {
     return (
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center py-20 flex flex-col items-center">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center py-20 flex flex-col items-center justify-center h-[60vh]">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <p className="mt-4 text-muted-foreground">Cargando resumen...</p>
+            <p className="mt-4 text-muted-foreground">Cargando...</p>
         </div>
     );
   }
 
-  if (cartItems.length === 0 && !preferenceId) {
+  if ((!displayItems || displayItems.length === 0) && !preferenceId) {
     return (
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center py-20">
         <h1 className="text-2xl font-bold">Tu carrito está vacío</h1>
@@ -229,6 +227,7 @@ export default function CheckoutPage() {
                         </div>
                     </div>
                     <Button type="submit" size="lg" className="w-full mt-6" disabled={isLoading || cartItems.length === 0}>
+                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         {isLoading ? 'Procesando...' : 'Confirmar y Pagar'}
                     </Button>
                 </form>
@@ -246,7 +245,7 @@ export default function CheckoutPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
-                        {cartItems.map(item => (
+                        {displayItems && displayItems.map(item => (
                             <div key={item.id} className="flex items-center justify-between">
                                 <div className="flex items-center gap-4">
                                     <div className="relative h-12 w-12 rounded-md overflow-hidden border">
@@ -265,7 +264,7 @@ export default function CheckoutPage() {
                     <div className="space-y-2">
                         <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Subtotal</span>
-                            <span>${cartTotal.toFixed(2)}</span>
+                            <span>${(displayTotal ?? 0).toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Envío</span>
@@ -285,4 +284,4 @@ export default function CheckoutPage() {
   );
 }
 
-
+    
