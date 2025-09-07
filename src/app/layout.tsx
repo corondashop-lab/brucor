@@ -54,7 +54,7 @@ export default function RootLayout({
   return (
     <html lang="es" className="h-full">
       <head>
-        <title>Minimalist Product Store</title>
+        <title>Brucor Store</title>
         <meta name="description" content="A modern and minimalist store for high-quality products." />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
