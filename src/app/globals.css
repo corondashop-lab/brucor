@@ -87,18 +87,3 @@ body {
     @apply bg-background text-foreground;
   }
 }
-
-@layer utilities {
-  .border-border {
-    border: 1px solid hsl(var(--border));
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-}
