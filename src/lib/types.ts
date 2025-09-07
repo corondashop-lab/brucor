@@ -53,11 +53,13 @@ export interface User {
   name: string;
   email: string;
   isAdmin: boolean;
+  isVerified?: boolean;
 }
 
 export interface StoredUser extends User {
     hashedPassword?: string;
     saleIds?: string[];
+    isVerified?: boolean;
 }
 
 export interface CustomerInfo {
